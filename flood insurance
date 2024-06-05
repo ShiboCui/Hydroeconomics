@@ -1,0 +1,116 @@
+%%%%%cal CCs%%%%%
+losscorr=corr(loss','type','Pearson');
+
+%%%%%cal risk reserves%%%%%
+rows = size(loss, 1); 
+EL = zeros(rows, 1);
+STL = zeros(rows, 1);
+p = zeros(rows, 1);
+for i = 1:rows
+    row = loss(i, :);
+    non_zero_elements = row(row ~= 0); 
+    non_zero_count = length(non_zero_elements); 
+    if non_zero_count > 0
+        EL(i) = mean(non_zero_elements);
+        STL(i) = std(non_zero_elements);
+    else
+        EL(i) = NaN;
+        STL(i) = NaN;
+    end
+    p(i) = non_zero_count / length(row);
+end
+
+for j=1:1:9
+    NEL=log(EL(j))-0.5*log(1+STL(j)^2/EL(j)^2);
+    NSTL=(log(1+STL(j)^2/EL(j)^2))^0.5;
+    funlog=@(L) (p(j)*lognpdf(L,NEL,NSTL));
+    L200(j)= fzero(@(z)(integral(funlog,0,z)-p(j)+0.005),0.05);
+end
+L200=L200';
+
+%%%%%cal premium with Shapley value%%%%%
+shu=9;
+shu1=shu-1;
+for k = 1:shu
+    loss = loss([2:end, 1], :); 
+    vectors = dec2bin(0:2^shu1-1) - '0';
+    for i=1:(2^shu1)
+        lossa=loss(1:shu1,:).*vectors(i,:)';
+        lossb=sum(lossa,1);
+        stdb=0.85*(mean(lossb)+0.25*std(lossb));
+        stdc=0.85*(mean(lossb+loss(shu,:))+0.25*std(lossb+loss(shu,:)));
+        num(i)=sum(vectors(i,:));
+        sp(i)=stdc-stdb;
+        spl(i,k)=sp(i);
+    end
+    numa = zeros(1,shu1); % Initialize numa to store the results
+    for i=1:(2^shu1)
+        for j=0:shu1
+            if num(i)==j
+                numa(i)=factorial(j) * factorial(shu1-j);
+                numak(i,k)=numa(i);
+            end
+        end
+    end
+    sharpley1(k)=sum((numa.*sp))/(factorial(shu));
+end
+a=sharpley1';
+
+%%%%%test CGT conditions%%%%%
+vectors = dec2bin(0:2^ shu-1) - '0';
+for i=1:2^ shu
+    lossa=loss(1: shu,:).*vectors(i,:)';
+    lossb=sum(lossa,1);
+    stdb(i)=0.85*(mean(lossb)+0.25*std(lossb));
+    stdc(i)=sharpley1*vectors(i,:)';
+    test(i)=stdc(i)-stdb(i);
+end
+z=max(test);
+[maxValue, maxIndex] = max(test);
+a=vectors(maxIndex,:);
+b=-test';
+stdb=stdb';
+
+%%%%%cal premium with nucleolus method%%%%%
+shu=9;
+shu1=shu-1;
+    vectors = dec2bin(0:2^shu-1) - '0';
+for i=1:(2^shu-1)
+    ab=vectors(i+1,:);
+    lossb=loss(:,:).*ab';
+    lossc=sum(lossb,1);
+    lossd(i)=0.85*(mean(lossc)+0.25*std(lossc));
+end
+losse=lossd';
+a=eye(510);
+Aeq = A;
+beq = losse;
+objFunc = @(xt) -xt(end); 
+n = 519; 
+m = 510; 
+A = [Aeq, zeros(size(Aeq, 1), 1)]; 
+b = beq;
+Aineq = [-eye(m), ones(m, 1)]; % -x(8:133) + t <= 0
+Aineq = [zeros(m, 9), Aineq]; 
+bineq = zeros(m, 1);
+lb = [zeros(n, 1); -inf]; 
+ub = []; 
+x0 = [ones(n, 1); 0]; 
+options = optimoptions('fmincon', 'Display', 'iter', 'MaxFunctionEvaluations', 5000000);
+solution = fmincon(objFunc, x0, Aineq, bineq, A, b, lb, ub, [], options);
+x_opt = solution(1:n);
+t_opt = solution(end);
+nucleolus=x_opt(1:9)';
+
+%%%%%test CGT conditions%%%%%
+vectors = dec2bin(0:2^ shu-1) - '0';
+for i=1:2^ shu
+    lossa=loss(1: shu,:).*vectors(i,:)';
+    lossb=sum(lossa,1);
+    stdb(i)=0.85*(mean(lossb)+0.25*std(lossb));
+    stdc(i)=nucleolus*vectors(i,:)';
+    test(i)=stdc(i)-stdb(i);
+end
+z=max(test);
+[maxValue, maxIndex] = max(test);
+a=vectors(maxIndex,:);
