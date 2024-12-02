@@ -29,88 +29,84 @@ end
 L200=L200';
 
 %%%%%cal premium with Shapley value%%%%%
-shu=9;
-shu1=shu-1;
-for k = 1:shu
-    loss = loss([2:end, 1], :); 
-    vectors = dec2bin(0:2^shu1-1) - '0';
-    for i=1:(2^shu1)
-        lossa=loss(1:shu1,:).*vectors(i,:)';
-        lossb=sum(lossa,1);
-        stdb=0.85*(mean(lossb)+0.25*std(lossb));
-        stdc=0.85*(mean(lossb+loss(shu,:))+0.25*std(lossb+loss(shu,:)));
-        num(i)=sum(vectors(i,:));
-        sp(i)=stdc-stdb;
-        spl(i,k)=sp(i);
+az=9;
+    bz=az-1;
+    a1=0.85;
+    a2=0.25;
+    for k = 1:az
+        loss = loss([2:end, 1], :); % 
+    
+    vectors = dec2bin(0:2^bz-1) - '0';
+    
+    for i=1:(2^bz)
+    lossa=loss(1:bz,:).*vectors(i,:)';
+    lossb=sum(lossa,1);
+    stdb=a1*(mean(lossb)+a2*std(lossb));
+    stdc=a1*(mean(lossb+loss(az,:))+a2*std(lossb+loss(az,:)));
+    num(i)=sum(vectors(i,:));
+    sp(i)=stdc-stdb;
     end
-    numa = zeros(1,shu1); % Initialize numa to store the results
-    for i=1:(2^shu1)
-        for j=0:shu1
-            if num(i)==j
-                numa(i)=factorial(j) * factorial(shu1-j);
-                numak(i,k)=numa(i);
-            end
+
+    numa = zeros(1, 2^bz-1); % Initialize numa to store the results
+    
+    for i=1:(2^bz)
+        for j=0:bz
+        if num(i)==j
+            numa(i)=factorial(j) * factorial(bz-j);
         end
+       end
     end
-    sharpley1(k)=sum((numa.*sp))/(factorial(shu));
-end
-a=sharpley1';
+
+    sharpley1(k)=sum((numa.*sp))/(factorial(az));
+    end
+    a=sharpley1';
+    b=sp';
 
 %%%%%test CGT conditions%%%%%
-vectors = dec2bin(0:2^ shu-1) - '0';
-for i=1:2^ shu
-    lossa=loss(1: shu,:).*vectors(i,:)';
+    az=9;
+    sharpley1=PM0';
+
+    vectors = dec2bin(0:2^az-1) - '0';
+    for i=1:2^az
+    lossa=loss(1:az,:).*vectors(i,:)';
     lossb=sum(lossa,1);
     stdb(i)=0.85*(mean(lossb)+0.25*std(lossb));
     stdc(i)=sharpley1*vectors(i,:)';
     test(i)=stdc(i)-stdb(i);
-end
-z=max(test);
-[maxValue, maxIndex] = max(test);
-a=vectors(maxIndex,:);
-b=-test';
-stdb=stdb';
+    end
+    z=max(test);
+    [maxValue, maxIndex] = max(test);
+    a1=vectors(maxIndex,:);  
+    A0=-test';
 
-%%%%%cal premium with nucleolus method%%%%%
-shu=9;
-shu1=shu-1;
-    vectors = dec2bin(0:2^shu-1) - '0';
-for i=1:(2^shu-1)
-    ab=vectors(i+1,:);
-    lossb=loss(:,:).*ab';
-    lossc=sum(lossb,1);
-    lossd(i)=0.85*(mean(lossc)+0.25*std(lossc));
-end
-losse=lossd';
-a=eye(510);
-Aeq = A;
-beq = losse;
-objFunc = @(xt) -xt(end); 
-n = 519; 
-m = 510; 
-A = [Aeq, zeros(size(Aeq, 1), 1)]; 
-b = beq;
-Aineq = [-eye(m), ones(m, 1)]; % -x(8:133) + t <= 0
-Aineq = [zeros(m, 9), Aineq]; 
-bineq = zeros(m, 1);
-lb = [zeros(n, 1); -inf]; 
-ub = []; 
-x0 = [ones(n, 1); 0]; 
-options = optimoptions('fmincon', 'Display', 'iter', 'MaxFunctionEvaluations', 5000000);
-solution = fmincon(objFunc, x0, Aineq, bineq, A, b, lb, ub, [], options);
-x_opt = solution(1:n);
-t_opt = solution(end);
-nucleolus=x_opt(1:9)';
+%%%%% risk aversion cal %%%%%
+for j=1:30
+    for i=1:500
+    EL =mean(loss(j,:));  
+    STL = std(loss(j,:));  
+    A = max(loss(j,:));
+    Pm = PM0(j);  
+    
+    NEL=log(EL)-0.5*log(1+STL^2/EL^2);
+    NSTL=(log(1+STL^2/EL^2))^0.5;
+    p_L=@(L) lognpdf(L,NEL,NSTL);
+    
+    b = 0.01*i;  
+    U = @(x) x.^(1-b)/(1-b); 
+      
+    L_max = A-0.01;  
+    L_min = 0.01; 
+      
+    UW_value = integral(@(L) U(A-L) .* p_L(L), L_min, L_max);  
+    UY_value = integral(@(L) U(A-0.1*L-Pm) .* p_L(L), L_min, L_max);  
+      
+    pan(i)=UY_value-UW_value;
+    end
+    panbie(:,j)=pan';
+    end
 
-%%%%%test CGT conditions%%%%%
-vectors = dec2bin(0:2^ shu-1) - '0';
-for i=1:2^ shu
-    lossa=loss(1: shu,:).*vectors(i,:)';
-    lossb=sum(lossa,1);
-    stdb(i)=0.85*(mean(lossb)+0.25*std(lossb));
-    stdc(i)=nucleolus*vectors(i,:)';
-    test(i)=stdc(i)-stdb(i);
-end
-z=max(test);
-[maxValue, maxIndex] = max(test);
-a=vectors(maxIndex,:);
+%%%%% willingness cal %%%%%
+    mu = 0;     
+    sigma = 1;  
+    P = 1 - normcdf(A, mu, sigma);
+
